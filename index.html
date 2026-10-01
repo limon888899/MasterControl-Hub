@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Universal Admin Panel</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f4f5f9;--card:#fff;--ink:#1c2236;--mute:#6b7390;--line:#e3e6ef;--side:#1c2236;--acc:#3d4fd6;--ok:#17915a;--bad:#d2403b}
+*{box-sizing:border-box;margin:0}
+body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--ink);display:flex;min-height:100vh}
+button,input,select,textarea{font:inherit}
+aside{width:250px;background:var(--side);color:#c9cee4;padding:16px 12px;position:fixed;inset:0 auto 0 0;overflow-y:auto;transition:transform .2s;z-index:20}
+aside h1{font-size:18px;color:#fff;padding:0 6px 12px}
+aside select{background:#2a3250;color:#fff;border:0;margin-bottom:8px}
+aside small{display:block;padding:12px 8px 4px;color:#8d94b8}
+.nav{display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;color:inherit;background:none;border:0;cursor:pointer;margin-bottom:2px}
+.nav:hover{background:#2a3250}.nav.on{background:var(--acc);color:#fff}
+.mini{display:flex;gap:6px;margin:6px 0}
+.mini button{flex:1;background:#2a3250;color:#c9cee4;border:0;border-radius:6px;padding:6px;cursor:pointer;font-size:13px}
+main{margin-left:250px;flex:1;padding:24px;min-width:0}
+header{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+header h2{font-size:21px;flex:1}
+#menu{display:none;border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 12px;cursor:pointer}
+.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+.bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.bar input{flex:1;min-width:140px}
+input,select,textarea{border:1px solid var(--line);border-radius:8px;padding:9px 11px;background:#fff;width:100%;color:var(--ink)}
+input[type=checkbox]{width:auto}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.btn{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:9px 16px;cursor:pointer;white-space:nowrap}
+.btn.g{background:#eceefa;color:var(--acc)}.btn.d{background:#fbe9e8;color:var(--bad)}.btn.s{padding:5px 10px;font-size:14px}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:520px}
+th,td{text-align:left;padding:10px;border-bottom:1px solid var(--line);font-size:15px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+th{color:var(--mute);font-weight:500}
+.empty{text-align:center;color:var(--mute);padding:28px;white-space:normal}
+.err{background:#fbe9e8;color:var(--bad);padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-word}
+.modal{position:fixed;inset:0;background:rgba(20,24,40,.5);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
+.modal.open{display:flex}
+.modal form{background:#fff;border-radius:12px;padding:20px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;display:grid;gap:12px}
+label{display:grid;gap:4px;font-size:14px;color:var(--mute)}
+.row{display:flex;gap:8px;justify-content:flex-end}
+pre{background:#12172a;color:#d6dcf5;padding:12px;border-radius:8px;overflow:auto;max-height:340px;font-size:13px;white-space:pre-wrap;word-break:break-word}
+#toast{position:fixed;bottom:20px;right:20px;background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:60}
+#toast.on{opacity:1}
+@media(max-width:800px){aside{transform:translateX(-100%)}aside.open{transform:none}main{margin-left:0;padding:16px}#menu{display:block}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<aside id="side"></aside>
+<main>
+  <header><button id="menu" aria-label="Menu">☰</button><h2 id="title"></h2></header>
+  <div id="view"></div>
+</main>
+<div class="modal" id="modal"><form id="form"></form></div>
+<div id="toast"></div>
+
+<script>
+/* ===== State (saved in localStorage) ===== */
+const demo={id:'demo',name:'Demo site (JSONPlaceholder)',base:'https://jsonplaceholder.typicode.com',auth:'none',hname:'',val:'',
+  resources:[{id:'r1',name:'Posts',path:'/posts',key:'',idf:'id',upd:'PUT',fields:'title, body:textarea, userId:number'},
+             {id:'r2',name:'Users',path:'/users',key:'',idf:'id',upd:'PUT',fields:''}]};
+let S;
+try{S=JSON.parse(localStorage.getItem('uap_en'))}catch(e){}
+if(!S||!S.sites)S={sites:[demo],site:'demo',view:'r1'};
+const save=()=>{try{localStorage.setItem('uap_en',JSON.stringify(S))}catch(e){}};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>'x'+Math.random().toString(36).slice(2,8);
+const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),2000)};
+const site=()=>S.sites.find(x=>x.id===S.site);
+const res=()=>site()?.resources.find(x=>x.id===S.view);
+let q='';
+
+/* ===== API calls ===== */
+async function req(m,path,body,raw){
+  const s=site(),h={Accept:'application/json'};
+  if(s.auth==='bearer')h.Authorization='Bearer '+s.val;
+  else if(s.auth==='header'&&s.hname)h[s.hname]=s.val;
+  if(body!==undefined)h['Content-Type']='application/json';
+  const r=await fetch(s.base.replace(/\/$/,'')+path,{method:m,headers:h,body:body!==undefined?JSON.stringify(body):undefined});
+  const t=await r.text();let d;try{d=JSON.parse(t)}catch(e){d=t}
+  if(raw)return{ok:r.ok,status:r.status,data:d};
+  if(!r.ok)throw new Error('HTTP '+r.status+' — '+(typeof d==='string'?d:JSON.stringify(d)).slice(0,200));
+  return d;
+}
+function toList(d,key){
+  if(key)d=key.split('.').reduce((a,k)=>a?.[k],d);
+  if(Array.isArray(d))return d;
+  if(d&&typeof d==='object'){const k=Object.keys(d).find(k=>Array.isArray(d[k]));if(k)return d[k]}
+  return[];
+}
+const parseFields=str=>(str||'').split(',').map(x=>x.trim()).filter(Boolean).map(x=>{const[n,t]=x.split(':');return[n.trim(),(t||'text').trim()]});
+
+/* ===== Generic dialog ===== */
+function dlg(title,fs,vals,ok){
+  const f=$('#form');
+  f.innerHTML=`<h3>${esc(title)}</h3>`+fs.map(([n,l,t,o])=>{
+    let v=vals[n];
+    let el;
+    if(t==='select')el=`<select name="${n}">${o.map(x=>`<option value="${x[0]}" ${v==x[0]?'selected':''}>${x[1]}</option>`).join('')}</select>`;
+    else if(t==='textarea'||t==='json')el=`<textarea name="${n}" rows="4">${esc(t==='json'&&v!==undefined&&typeof v!=='string'?JSON.stringify(v):v)}</textarea>`;
+    else if(t==='checkbox')el=`<input type="checkbox" name="${n}" ${v?'checked':''}>`;
+    else el=`<input name="${n}" type="${t}" value="${esc(v)}">`;
+    return`<label>${esc(l)}${el}</label>`}).join('')+`<div class="row"><button type="button" class="btn g" id="cx">Cancel</button><button class="btn">Save changes</button></div>`;
+  $('#modal').classList.add('open');
+  $('#cx').onclick=closeDlg;
+  f.onsubmit=async e=>{e.preventDefault();const out={};
+    for(const[n,l,t]of fs){const el=f.elements[n];
+      if(t==='checkbox')out[n]=el.checked;
+      else if(t==='number')out[n]=el.value===''?undefined:Number(el.value);
+      else if(t==='json'){try{out[n]=el.value?JSON.parse(el.value):undefined}catch(x){return toast('"'+l+'" is not valid JSON')}}
+      else out[n]=el.value}
+    try{await ok(out);closeDlg()}catch(x){toast(x.message)}};
+}
+const closeDlg=()=>$('#modal').classList.remove('open');
+$('#modal').onclick=e=>{if(e.target.id==='modal')closeDlg()};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDlg()});
+
+/* ===== Site and resource forms ===== */
+const siteF=[['name','Site name','text'],['base','API base URL (e.g. https://mysite.com/api)','text'],
+  ['auth','Authentication','select',[['none','None'],['bearer','Bearer token'],['header','Custom header (e.g. X-API-Key)']]],
+  ['hname','Header name (custom header only)','text'],['val','Token / key','text']];
+const resF=[['name','Resource name (e.g. Posts)','text'],['path','Endpoint (e.g. /posts)','text'],
+  ['key','Key that holds the list (leave blank for auto, e.g. data)','text'],['idf','ID field name','text'],
+  ['upd','Update method','select',[['PUT','PUT'],['PATCH','PATCH']]],
+  ['fields','Fields (comma separated; blank = auto). Example: title, price:number, body:textarea, active:checkbox, meta:json','textarea']];
+
+function addSite(edit){
+  const cur=edit?site():{auth:'none'};
+  dlg(edit?'Edit site':'Add site',siteF,cur,async d=>{
+    if(!d.name||!d.base)throw new Error('Enter a name and a URL');
+    if(edit)Object.assign(cur,d);else{const n={id:uid(),resources:[],...d};S.sites.push(n);S.site=n.id;S.view='tester'}
+    save();render();toast('Saved')});
+}
+function addRes(edit){
+  const cur=edit?res():{idf:'id',upd:'PUT'};
+  dlg(edit?'Edit resource':'Add resource',resF,cur,async d=>{
+    if(!d.name||!d.path)throw new Error('Enter a name and an endpoint');
+    d.idf=d.idf||'id';
+    if(edit)Object.assign(cur,d);else{const n={id:uid(),...d};site().resources.push(n);S.view=n.id}
+    save();render();toast('Saved')});
+}
+
+/* ===== Sidebar ===== */
+function side(){
+  const s=site();
+  $('#side').innerHTML=`<h1>Admin Panel</h1>
+  <select id="ss">${S.sites.map(x=>`<option value="${x.id}" ${x.id===S.site?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
+  <div class="mini"><button id="a1">+ Site</button><button id="a2">Edit</button><button id="a3">Delete</button></div>
+  <small>Data</small>
+  ${s?s.resources.map(r=>`<button class="nav ${S.view===r.id?'on':''}" data-v="${r.id}">${esc(r.name)}</button>`).join(''):''}
+  <div class="mini"><button id="b1">+ Resource</button></div>
+  <small>Tools</small>
+  <button class="nav ${S.view==='tester'?'on':''}" data-v="tester">API tester</button>`;
+  $('#ss').onchange=e=>{S.site=e.target.value;S.view=site().resources[0]?.id||'tester';save();render()};
+  $('#a1').onclick=()=>addSite(false);
+  $('#a2').onclick=()=>s&&addSite(true);
+  $('#a3').onclick=()=>{if(s&&confirm('Remove this site connection? Data on your site is not deleted.')){S.sites=S.sites.filter(x=>x!==s);S.site=S.sites[0]?.id;S.view='tester';save();render()}};
+  $('#b1').onclick=()=>s?addRes(false):toast('Add a site first');
+  document.querySelectorAll('.nav').forEach(b=>b.onclick=()=>{S.view=b.dataset.v;q='';save();$('#side').classList.remove('open');render()});
+}
+
+/* ===== Main view ===== */
+function render(){side();
+  const v=$('#view'),s=site();
+  if(!s){$('#title').textContent='Get started';v.innerHTML='<div class="box empty">Press “+ Site” in the sidebar to connect your site’s API.</div>';return}
+  if(S.view==='tester')return tester();
+  const r=res();
+  if(!r){$('#title').textContent=s.name;v.innerHTML='<div class="box empty">Press “+ Resource” to add an endpoint (e.g. /posts), or use the API tester.</div>';return}
+  list(r)}
+
+async function list(r){
+  const v=$('#view');$('#title').textContent=r.name;
+  v.innerHTML='<div class="box empty">Loading…</div>';
+  let rows;
+  try{rows=toList(await req('GET',r.path),r.key)}
+  catch(e){v.innerHTML=`<div class="box"><div class="err">${esc(e.message)}\n\nPossible causes: wrong URL, wrong token, or CORS is not enabled on your API.</div><br><button class="btn g" id="ed">Resource settings</button></div>`;$('#ed').onclick=()=>addRes(true);return}
+  const fs=parseFields(r.fields);
+  const sample=rows[0]||{};
+  const cols=(fs.length?fs.map(f=>f[0]):Object.keys(sample).filter(k=>typeof sample[k]!=='object')).slice(0,6);
+  const shown=rows.filter(x=>JSON.stringify(x).toLowerCase().includes(q.toLowerCase()));
+  v.innerHTML=`<div class="box"><div class="bar"><input id="q" placeholder="Search…" value="${esc(q)}"><button class="btn" id="add">Add new</button><button class="btn g" id="rs">Resource settings</button></div>
+  <div class="tw"><table><thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join('')}<th></th></tr></thead><tbody>
+  ${shown.length?shown.map(x=>`<tr>${cols.map(c=>`<td title="${esc(typeof x[c]==='object'?JSON.stringify(x[c]):x[c])}">${esc(typeof x[c]==='object'?JSON.stringify(x[c]):x[c])}</td>`).join('')}<td style="white-space:nowrap"><button class="btn g s" data-e="${esc(x[r.idf])}">Edit</button> <button class="btn d s" data-d="${esc(x[r.idf])}">Delete</button></td></tr>`).join(''):`<tr><td colspan="9" class="empty">Nothing here yet. Press “Add new”.</td></tr>`}
+  </tbody></table></div><p style="color:var(--mute);font-size:13px;margin-top:8px">${shown.length} item${shown.length===1?'':'s'}</p></div>`;
+  const qi=$('#q');qi.oninput=e=>{q=e.target.value;list(r)};
+  const form=(row)=>{
+    const o=row||sample;
+    const f=fs.length?fs:Object.keys(o).filter(k=>k!==r.idf).map(k=>[k,typeof o[k]==='object'?'json':typeof o[k]==='number'?'number':typeof o[k]==='boolean'?'checkbox':'text']);
+    return f.map(([n,t])=>[n,n,t])};
+  $('#add').onclick=()=>dlg('Add '+r.name,form(null),{},async d=>{await req('POST',r.path,d);toast('Added');list(r)});
+  $('#rs').onclick=()=>addRes(true);
+  v.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>{
+    const row=rows.find(x=>String(x[r.idf])===b.dataset.e);
+    dlg('Edit item',form(row),row,async d=>{
+      await req(r.upd,r.path+'/'+encodeURIComponent(b.dataset.e),r.upd==='PUT'?{...row,...d}:d);toast('Updated');list(r)})});
+  v.querySelectorAll('[data-d]').forEach(b=>b.onclick=async()=>{
+    if(!confirm('Delete this item?'))return;
+    try{await req('DELETE',r.path+'/'+encodeURIComponent(b.dataset.d));toast('Deleted');list(r)}catch(e){toast(e.message)}});
+}
+
+function tester(){
+  $('#title').textContent='API tester';
+  $('#view').innerHTML=`<div class="box" style="display:grid;gap:10px">
+  <div class="bar" style="margin:0"><select id="tm" style="max-width:110px"><option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option></select><input id="tp" placeholder="/posts/1"><button class="btn" id="go">Send request</button></div>
+  <label>Body (JSON, if needed)<textarea id="tb" rows="4" placeholder='{"title":"Hello"}'></textarea></label>
+  <pre id="out">The response will appear here</pre></div>`;
+  $('#go').onclick=async()=>{
+    const out=$('#out');out.textContent='Sending…';
+    let b;const t=$('#tb').value.trim();
+    if(t&&$('#tm').value!=='GET'){try{b=JSON.parse(t)}catch(e){out.textContent='Body is not valid JSON';return}}
+    try{const r=await req($('#tm').value,$('#tp').value||'/',b,true);
+      out.textContent='Status: '+r.status+'\n\n'+(typeof r.data==='string'?r.data:JSON.stringify(r.data,null,2))}
+    catch(e){out.textContent='Failed: '+e.message+'\n\nCheck that the URL is correct and CORS is enabled.'}};
+}
+$('#menu').onclick=()=>$('#side').classList.toggle('open');
+render();
+</script>
+</body>
+</html>
